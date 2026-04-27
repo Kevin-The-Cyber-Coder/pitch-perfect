@@ -249,6 +249,10 @@ function Index() {
             <StatusChip icon={Shield} label={`AI ${snapshot.aiLevel.toFixed(1)}x`} />
             {snapshot.foul && <StatusChip icon={Zap} label="Advantage" />}
           </div>
+          <div className="pointer-events-none absolute right-3 top-3 hidden max-w-[16rem] border border-border bg-background/80 p-3 text-xs font-bold text-foreground shadow-[var(--shadow-stadium)] backdrop-blur sm:block">
+            <p className="font-display text-sm text-primary">Manual ball controls</p>
+            <p className="mt-1 text-muted-foreground">Aim with WASD/Arrows, then J pass or K/Space shoot. Hold Shift while meeting a loose ball to trap it dead.</p>
+          </div>
           <div className="pointer-events-none absolute bottom-3 left-3 right-3 grid gap-2 sm:grid-cols-3">
             <HudMeter label="Stamina" value={snapshot.stamina} />
             <HudMeter label="Weather" value={snapshot.weather === "clear" ? 100 : snapshot.weather === "rain" ? 64 : 42} text={snapshot.weather.toUpperCase()} />
@@ -272,10 +276,10 @@ function Index() {
             <p className="text-sm font-bold uppercase text-muted-foreground">Keyboard match controls</p>
             <div className="mt-3 grid grid-cols-2 gap-2 text-sm font-semibold text-muted-foreground">
               <ControlKey value="WASD" label="Move" />
-              <ControlKey value="Shift" label="Sprint" />
+              <ControlKey value="Shift" label="Sprint / trap" />
               <ControlKey value="Q" label="Switch" />
-              <ControlKey value="J" label="Pass" />
-              <ControlKey value="K" label="Shoot" />
+              <ControlKey value="Aim + J" label="Manual pass" />
+              <ControlKey value="Aim + K" label="Manual shot" />
               <ControlKey value="L" label="Tackle" />
             </div>
           </div>
