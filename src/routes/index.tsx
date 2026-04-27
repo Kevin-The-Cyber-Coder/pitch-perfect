@@ -492,11 +492,17 @@ function resolveLooseBall(game: GameState) {
   for (const player of game.players) {
     const reach = player.role === "keeper" ? 3.6 : 2.7;
     if (dist(player.pos, game.ball) < reach && game.ballHeight < 1.5) {
+      const sprintTrap = player.id === game.selected && game.keys.has("shift") && Math.hypot(game.ballVelocity.x, game.ballVelocity.z) > 0.45;
       game.players.forEach((item) => (item.hasBall = false));
       player.hasBall = true;
       game.possession = player.team;
       game.lastTouch = player.team;
-      game.message = player.team === "home" ? `${player.name} possession` : "CPU possession";
+      if (sprintTrap) {
+        game.ballVelocity = { x: 0, z: 0 };
+        game.ballLift = 0;
+        player.stamina = clamp(player.stamina - 4, 0, 100);
+      }
+      game.message = sprintTrap ? "Sprint trap controlled" : player.team === "home" ? `${player.name} possession` : "CPU possession";
       return;
     }
   }
