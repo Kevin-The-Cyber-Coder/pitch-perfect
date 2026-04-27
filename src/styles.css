@@ -195,6 +195,16 @@
   .spotlight-sweep {
     animation: spotlight-sweep 7s ease-in-out infinite alternate;
   }
+
+  .rain-lines {
+    background-image: repeating-linear-gradient(
+      108deg,
+      transparent 0 10px,
+      color-mix(in oklab, var(--pitch-foreground) 34%, transparent) 11px 12px,
+      transparent 13px 22px
+    );
+    animation: rain-fall 0.42s linear infinite;
+  }
 }
 
 @keyframes spotlight-sweep {
@@ -205,6 +215,15 @@
   to {
     transform: translate3d(14%, 2%, 0) rotate(8deg);
     opacity: 0.72;
+  }
+}
+
+@keyframes rain-fall {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: -36px 54px;
   }
 }
 
