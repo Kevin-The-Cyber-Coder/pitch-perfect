@@ -1,26 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  Activity,
-  BarChart3,
-  Brain,
-  CloudRain,
-  Cpu,
-  Gamepad2,
-  Headphones,
-  HeartPulse,
-  LineChart,
-  Megaphone,
-  MonitorPlay,
-  Network,
-  ShieldCheck,
-  SlidersHorizontal,
-  Sparkles,
-  Trophy,
-  Users,
-  Waves,
-  BadgeAlert,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { CloudRain, Gamepad2, RotateCcw, Shield, Target, Trophy, Zap } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
@@ -28,264 +8,426 @@ export const Route = createFileRoute("/")({
   component: Index,
 });
 
-const pillars = [
-  { label: "Match Engine", value: "22+1", detail: "players, ball, referee" },
-  { label: "Modes", value: "9", detail: "career to co-op seasons" },
-  { label: "Online", value: "<50ms", detail: "target input response" },
-  { label: "MVP", value: "4 teams", detail: "1 stadium, 1 weather" },
-];
+type Vec = { x: number; y: number };
+type Team = "home" | "away";
+type Weather = "clear" | "rain";
+type Snapshot = {
+  player: Vec;
+  cpu: Vec;
+  keeperHome: Vec;
+  keeperAway: Vec;
+  ball: Vec;
+  score: { home: number; away: number };
+  time: number;
+  possession: Team;
+  message: string;
+  stamina: number;
+  aiLevel: number;
+  weather: Weather;
+  assisted: boolean;
+  lastGoal?: Team;
+};
 
-const featureGroups = [
-  {
-    title: "Core Gameplay",
-    icon: Gamepad2,
-    accent: "primary",
-    items: [
-      "Adaptive AI difficulty that learns common moves mid-match",
-      "Manual and assisted controls with clear risk-reward tuning",
-      "Contextual physicality: barges, shirt pulls, off-ball jostling",
-      "Dynamic weather and pitch degradation affecting speed, control, and visibility",
-      "Passing, shooting, dribbling, tackling, goalkeeping, offside, VAR, and set pieces",
-    ],
-  },
-  {
-    title: "Career / Manager",
-    icon: Trophy,
-    accent: "accent",
-    items: [
-      "Youth academy scouts prospects with traits, personalities, and growth curves",
-      "Transfers with loans, buy options, sell-on clauses, swaps, and release clauses",
-      "Morale, chemistry, form arrows, player feuds, agents, and leadership council",
-      "Press conferences, media battles, board goals, staff, finances, and injuries",
-      "Budget split across transfers, youth, medical staff, analytics, wages, and travel",
-    ],
-  },
-  {
-    title: "Online & Social",
-    icon: Network,
-    accent: "tactical",
-    items: [
-      "Ranked seasons, online friendlies, co-op seasons, spectator mode, and lobbies",
-      "Skill matchmaking with region, connection quality, fair play, and leaderboards",
-      "Dedicated servers for competitive goals, fouls, offside, and validation",
-      "Custom tournament creator with groups, knockout, VAR, extra-time, and invites",
-      "Goal-of-the-week voting, club rivalries, shared training ground, and rewards",
-    ],
-  },
-  {
-    title: "Immersion",
-    icon: MonitorPlay,
-    accent: "warning",
-    items: [
-      "Dynamic commentary tied to previous matches, rumors, records, and competition",
-      "Authentic chants, tifos, VAR reactions, crowd tide, and title pitch invasion",
-      "Broadcast overlays, selectable packages, replays, cutscenes, and studio show",
-      "Time-of-day progression, camera droplets, orange ball in snow, visible referee traits",
-      "On-pitch coaching visuals for lanes, defensive shape, heatmaps, and networks",
-    ],
-  },
-  {
-    title: "Customization & Access",
-    icon: SlidersHorizontal,
-    accent: "primary",
-    items: [
-      "Create-a-club editor for badge, kits, stadium, rivals, budget, and league",
-      "Tactical periodization for attacking, defending, set pieces, and match phases",
-      "Controller remap, colorblind modes, high-contrast indicators, large UI, visual cues",
-      "Custom difficulty sliders by facet: marking, error, pace, keeper, injury, tactics",
-      "Scenario mode for famous comebacks, relegation rescues, and historic challenges",
-    ],
-  },
-  {
-    title: "Hardcore Systems",
-    icon: Brain,
-    accent: "accent",
-    items: [
-      "Set-piece designer with custom runs, import/export, and shareable routines",
-      "Injury realism with carryover timelines and rushed-recovery reinjury risk",
-      "Stat-driven form from last five ratings rather than random boosts",
-      "Diving as a learnable high-risk trait with penalty or yellow-card outcomes",
-      "Hardcore toggles for handball, grass length, tax lines, agent fees, and investigations",
-    ],
-  },
-];
+type GameState = Snapshot & {
+  ballVelocity: Vec;
+  target: Vec | null;
+  sprintTicks: number;
+  shotTicks: number;
+  lastCpuKick: number;
+  lastTouch: Team;
+};
 
-const requirements = [
-  { icon: Cpu, title: "Engine", body: "Unity DOTS or Unreal Engine 5, 60 FPS gameplay, <50 ms input feel, scalable PC/console/mobile targets." },
-  { icon: Activity, title: "Physics", body: "Ball bounce, spin, air resistance, wet-grass friction, collision layers, IK, ragdoll recovery, and motion matching." },
-  { icon: Brain, title: "AI", body: "Utility AI or behavior trees, team coordination, goalkeeper FSM, referee strictness, tactical adaptation, and scouting reports." },
-  { icon: Waves, title: "Networking", body: "Server authority for critical events, prediction, interpolation, rollback or deterministic lockstep, NAT traversal, anti-cheat." },
-  { icon: BarChart3, title: "Data", body: "Local career saves, online accounts, ELO, leaderboards, cloud saves, progression, event triggers, and relational traits." },
-  { icon: Headphones, title: "Audio", body: "FMOD/Wwise dynamic mix, commentary banks, whistle cues, chants, VAR audio, spatialized referee and stadium sound." },
-  { icon: ShieldCheck, title: "Security", body: "Validated results, client integrity checks, protected accounts, fair-play telemetry, safe user-generated tournaments." },
-  { icon: HeartPulse, title: "Accessibility", body: "Remapping, simplified controls, adjustable game speed, visual audio cues, colorblind-safe overlays, large text." },
-];
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+const distance = (a: Vec, b: Vec) => Math.hypot(a.x - b.x, a.y - b.y);
+const moveToward = (from: Vec, to: Vec, amount: number): Vec => {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const len = Math.hypot(dx, dy) || 1;
+  return { x: from.x + (dx / len) * amount, y: from.y + (dy / len) * amount };
+};
 
-const roadmap = [
-  ["MVP", "Kick-off, local PvP or basic AI, 4 teams, 1 stadium, simple weather, core pass/shoot/tackle."],
-  ["High-impact", "Heatmaps, assistant coach tips, sliders, scenario mode, set-piece designer, career morale."],
-  ["Franchise", "Deep career, co-op seasons, custom tournaments, commentary context, youth academy, live events."],
-  ["Stretch", "Full VAR review, licensed stadiums, cross-platform progression, voice substitutions, advanced social loops."],
-];
-
-const pitchSignals: Array<[string, string, LucideIcon]> = [
-  ["Adaptive AI", "top-[15%] left-[16%]", Brain],
-  ["Weather", "top-[24%] right-[16%]", CloudRain],
-  ["Career", "top-[47%] left-[10%]", Trophy],
-  ["Co-op", "top-[44%] right-[12%]", Users],
-  ["Ref logic", "bottom-[22%] left-[27%]", BadgeAlert],
-  ["Analytics", "bottom-[15%] right-[22%]", LineChart],
-];
+const createInitialGame = (): GameState => ({
+  player: { x: 28, y: 50 },
+  cpu: { x: 72, y: 50 },
+  keeperHome: { x: 5, y: 50 },
+  keeperAway: { x: 95, y: 50 },
+  ball: { x: 50, y: 50 },
+  ballVelocity: { x: 0, y: 0 },
+  target: null,
+  score: { home: 0, away: 0 },
+  time: 90,
+  possession: "home",
+  message: "Kick-off",
+  stamina: 100,
+  aiLevel: 1,
+  weather: "clear",
+  assisted: true,
+  sprintTicks: 0,
+  shotTicks: 0,
+  lastCpuKick: 0,
+  lastTouch: "home",
+});
 
 function Index() {
+  const [snapshot, setSnapshot] = useState<Snapshot>(() => createInitialGame());
+  const gameRef = useRef<GameState>(createInitialGame());
+  const keysRef = useRef(new Set<string>());
+  const fieldRef = useRef<HTMLDivElement>(null);
+  const lastFrameRef = useRef<number | null>(null);
+  const runningRef = useRef(true);
+
+  const publish = (game: GameState) => {
+    setSnapshot({
+      player: game.player,
+      cpu: game.cpu,
+      keeperHome: game.keeperHome,
+      keeperAway: game.keeperAway,
+      ball: game.ball,
+      score: game.score,
+      time: game.time,
+      possession: game.possession,
+      message: game.message,
+      stamina: game.stamina,
+      aiLevel: game.aiLevel,
+      weather: game.weather,
+      assisted: game.assisted,
+      lastGoal: game.lastGoal,
+    });
+  };
+
+  const resetPositions = (kickoff: Team, message: string) => {
+    const game = gameRef.current;
+    game.player = { x: kickoff === "home" ? 30 : 24, y: 50 };
+    game.cpu = { x: kickoff === "away" ? 70 : 76, y: 50 };
+    game.keeperHome = { x: 5, y: 50 };
+    game.keeperAway = { x: 95, y: 50 };
+    game.ball = { x: 50, y: 50 };
+    game.ballVelocity = { x: 0, y: 0 };
+    game.possession = kickoff;
+    game.lastTouch = kickoff;
+    game.target = null;
+    game.message = message;
+    game.lastGoal = kickoff === "home" ? "away" : "home";
+  };
+
+  const resetMatch = () => {
+    gameRef.current = createInitialGame();
+    publish(gameRef.current);
+  };
+
+  const kickBall = (team: Team, power: number, aim?: Vec) => {
+    const game = gameRef.current;
+    const origin = team === "home" ? game.player : game.cpu;
+    if (distance(origin, game.ball) > 8) return;
+
+    const target = aim ?? (team === "home" ? { x: 99, y: 50 } : { x: 1, y: 50 });
+    const dx = target.x - game.ball.x;
+    const dy = target.y - game.ball.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const assist = game.assisted ? (team === "home" ? 0.28 : 0.18) : 0;
+    const goalY = team === "home" ? 50 : 50;
+    const guidedY = target.y * (1 - assist) + goalY * assist;
+    const gdx = target.x - game.ball.x;
+    const gdy = guidedY - game.ball.y;
+    const glen = Math.hypot(gdx, gdy) || len;
+
+    game.ballVelocity = { x: (gdx / glen) * power, y: (gdy / glen) * power };
+    game.possession = team;
+    game.lastTouch = team;
+    game.message = team === "home" ? "Shot away" : "Counter attack";
+    if (team === "home") game.shotTicks += power > 0.78 ? 1 : 0;
+  };
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      keysRef.current.add(event.key.toLowerCase());
+      if ([" ", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(event.key.toLowerCase())) {
+        event.preventDefault();
+      }
+      if (event.key.toLowerCase() === "j") kickBall("home", 0.72, { x: 82, y: gameRef.current.ball.y });
+      if (event.key.toLowerCase() === "k" || event.key === " ") kickBall("home", 1.18, { x: 99, y: 50 });
+    };
+    const onKeyUp = (event: KeyboardEvent) => keysRef.current.delete(event.key.toLowerCase());
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, []);
+
+  useEffect(() => {
+    runningRef.current = true;
+    const step = (timeStamp: number) => {
+      const previous = lastFrameRef.current ?? timeStamp;
+      const delta = clamp((timeStamp - previous) / 16.67, 0.5, 2);
+      lastFrameRef.current = timeStamp;
+      const game = gameRef.current;
+      if (game.time > 0) updateGame(game, delta);
+      publish(game);
+      if (runningRef.current) requestAnimationFrame(step);
+    };
+    const frame = requestAnimationFrame(step);
+    return () => {
+      runningRef.current = false;
+      cancelAnimationFrame(frame);
+    };
+  }, []);
+
+  const updateGame = (game: GameState, delta: number) => {
+    game.time = clamp(game.time - delta / 60, 0, 90);
+
+    const keys = keysRef.current;
+    const input = {
+      x: (keys.has("arrowright") || keys.has("d") ? 1 : 0) - (keys.has("arrowleft") || keys.has("a") ? 1 : 0),
+      y: (keys.has("arrowdown") || keys.has("s") ? 1 : 0) - (keys.has("arrowup") || keys.has("w") ? 1 : 0),
+    };
+    const sprinting = keys.has("shift") && game.stamina > 4;
+    if (sprinting) game.sprintTicks += 1;
+    const inputLen = Math.hypot(input.x, input.y) || 1;
+    const weatherDrag = game.weather === "rain" ? 0.82 : 1;
+    const sprintBoost = sprinting ? 1.58 : 1;
+    const playerSpeed = 0.62 * sprintBoost * weatherDrag;
+
+    if (input.x || input.y) {
+      game.target = null;
+      game.player = {
+        x: clamp(game.player.x + (input.x / inputLen) * playerSpeed * delta, 4, 96),
+        y: clamp(game.player.y + (input.y / inputLen) * playerSpeed * delta, 7, 93),
+      };
+    } else if (game.target) {
+      if (distance(game.player, game.target) > 1.2) game.player = moveToward(game.player, game.target, 0.5 * delta);
+    }
+
+    game.stamina = clamp(game.stamina + (sprinting ? -0.22 : 0.11) * delta, 0, 100);
+    game.aiLevel = clamp(1 + game.sprintTicks / 520 + game.shotTicks / 8, 1, 2.4);
+
+    const cpuGoal = game.possession === "away" || game.ball.x > 47 ? game.ball : { x: 62, y: game.ball.y };
+    const cpuSpeed = (0.44 + game.aiLevel * 0.12) * weatherDrag;
+    game.cpu = moveToward(game.cpu, cpuGoal, cpuSpeed * delta);
+    game.cpu.x = clamp(game.cpu.x, 4, 96);
+    game.cpu.y = clamp(game.cpu.y, 7, 93);
+
+    game.keeperHome.y = clamp(game.ball.y, 39, 61);
+    game.keeperAway.y = clamp(game.ball.y, 39, 61);
+
+    if (distance(game.player, game.ball) < 4.2 && Math.hypot(game.ballVelocity.x, game.ballVelocity.y) < 0.36) {
+      game.ball = moveToward(game.ball, { x: game.player.x + 3.8, y: game.player.y }, 0.9 * delta);
+      game.possession = "home";
+      game.lastTouch = "home";
+      game.message = "Home possession";
+    }
+
+    if (distance(game.cpu, game.ball) < 4.4 && timeSinceCpuKick(game) > 28) {
+      game.possession = "away";
+      game.lastTouch = "away";
+      game.lastCpuKick = performance.now();
+      const closeToGoal = game.ball.x < 36;
+      kickBall("away", closeToGoal ? 1.06 : 0.66, closeToGoal ? { x: 1, y: 50 } : { x: 34, y: game.player.y });
+    }
+
+    const friction = game.weather === "rain" ? 0.982 : 0.972;
+    game.ball.x += game.ballVelocity.x * delta;
+    game.ball.y += game.ballVelocity.y * delta;
+    game.ballVelocity.x *= Math.pow(friction, delta);
+    game.ballVelocity.y *= Math.pow(friction, delta);
+
+    if (game.ball.y < 5 || game.ball.y > 95) {
+      game.ball.y = clamp(game.ball.y, 5, 95);
+      game.ballVelocity.y *= -0.72;
+    }
+
+    if (distance(game.keeperAway, game.ball) < 5.5 && game.ball.x > 91) {
+      game.ballVelocity = { x: -0.74, y: (game.ball.y - 50) * 0.035 };
+      game.message = "Away keeper save";
+    }
+    if (distance(game.keeperHome, game.ball) < 5.5 && game.ball.x < 9) {
+      game.ballVelocity = { x: 0.74, y: (game.ball.y - 50) * 0.035 };
+      game.message = "Home keeper save";
+    }
+
+    if (game.ball.x >= 99 && game.ball.y > 38 && game.ball.y < 62) {
+      game.score = { ...game.score, home: game.score.home + 1 };
+      resetPositions("away", "Goal for Home");
+    } else if (game.ball.x <= 1 && game.ball.y > 38 && game.ball.y < 62) {
+      game.score = { ...game.score, away: game.score.away + 1 };
+      resetPositions("home", "Goal for Away");
+    } else if (game.ball.x < 0 || game.ball.x > 100) {
+      game.ball.x = clamp(game.ball.x, 2, 98);
+      game.ballVelocity.x *= -0.55;
+      game.message = "Ball back in play";
+    }
+
+    if (game.time <= 0) game.message = game.score.home === game.score.away ? "Full time draw" : game.score.home > game.score.away ? "Home win" : "Away win";
+  };
+
+  const timeSinceCpuKick = (game: GameState) => performance.now() - game.lastCpuKick;
+
+  const setPointerTarget = (clientX: number, clientY: number) => {
+    const rect = fieldRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    gameRef.current.target = {
+      x: clamp(((clientX - rect.left) / rect.width) * 100, 4, 96),
+      y: clamp(((clientY - rect.top) / rect.height) * 100, 7, 93),
+    };
+  };
+
+  const toggleWeather = () => {
+    const game = gameRef.current;
+    game.weather = game.weather === "clear" ? "rain" : "clear";
+    game.message = game.weather === "rain" ? "Rain on" : "Clear skies";
+    publish(game);
+  };
+
+  const toggleAssisted = () => {
+    const game = gameRef.current;
+    game.assisted = !game.assisted;
+    game.message = game.assisted ? "Assisted controls" : "Manual controls";
+    publish(game);
+  };
+
+  const minutes = Math.floor(snapshot.time);
+  const seconds = Math.floor((snapshot.time % 1) * 60).toString().padStart(2, "0");
+  const matchOver = snapshot.time <= 0;
+
   return (
-    <main className="relative min-h-screen overflow-hidden bg-background text-foreground">
-      <div className="stadium-grid absolute inset-0 opacity-60" />
-      <div className="spotlight-sweep pointer-events-none absolute left-1/2 top-0 h-80 w-[42rem] -translate-x-1/2 bg-floodlight/20 blur-3xl" />
-
-      <section className="relative mx-auto grid min-h-[92vh] max-w-7xl gap-10 px-5 py-8 sm:px-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:py-12">
-        <div className="space-y-8">
-          <nav className="flex flex-wrap items-center gap-3 text-xs font-bold uppercase tracking-normal text-muted-foreground">
-            <span className="rounded-sm border border-border bg-card/60 px-3 py-1.5">Game Design Bible</span>
-            <span>Football simulation scope</span>
-          </nav>
-
-          <div className="space-y-5">
-            <p className="inline-flex items-center gap-2 rounded-sm bg-primary px-3 py-1 text-sm font-bold text-primary-foreground">
-              <Sparkles className="h-4 w-4" /> Full features + requirements
-            </p>
-            <h1 className="max-w-4xl font-display text-5xl leading-[0.92] tracking-normal text-foreground sm:text-7xl lg:text-8xl">
-              Total football game blueprint.
-            </h1>
-            <p className="max-w-2xl text-lg leading-8 text-muted-foreground sm:text-xl">
-              A production-ready feature map for a modern football game: on-pitch systems,
-              career depth, online play, broadcast presentation, accessibility, and technical requirements.
-            </p>
+    <main className="min-h-screen overflow-hidden bg-background text-foreground">
+      <div className="mx-auto grid min-h-screen max-w-7xl grid-rows-[auto_1fr_auto] gap-3 px-3 py-3 sm:px-5 sm:py-5 lg:grid-cols-[1fr_18rem] lg:grid-rows-[auto_1fr]">
+        <header className="flex flex-wrap items-center justify-between gap-3 border border-border bg-card/80 px-4 py-3 shadow-[var(--shadow-stadium)] backdrop-blur lg:col-span-2">
+          <div className="flex items-center gap-3">
+            <span className="grid h-10 w-10 place-items-center bg-primary text-primary-foreground">
+              <Trophy className="h-5 w-5" />
+            </span>
+            <div>
+              <h1 className="font-display text-xl leading-none text-foreground sm:text-3xl">Touchline Football</h1>
+              <p className="text-sm font-semibold text-muted-foreground">Home {snapshot.score.home} — {snapshot.score.away} Away</p>
+            </div>
           </div>
-
-          <div className="flex flex-wrap gap-3">
-            <Button variant="stadium" size="lg" asChild>
-              <a href="#features">View features</a>
-            </Button>
-            <Button variant="broadcast" size="lg" asChild>
-              <a href="#requirements">Technical requirements</a>
-            </Button>
+          <div className="flex items-center gap-2 font-display text-2xl text-primary tabular-nums">
+            {minutes}:{seconds}
           </div>
+        </header>
 
-          <div className="grid gap-3 sm:grid-cols-4">
-            {pillars.map((pillar) => (
-              <div key={pillar.label} className="border border-border bg-card/70 p-4 shadow-[var(--shadow-stadium)] backdrop-blur">
-                <p className="text-xs font-bold uppercase text-muted-foreground">{pillar.label}</p>
-                <p className="mt-2 font-display text-2xl text-primary">{pillar.value}</p>
-                <p className="mt-1 text-sm text-muted-foreground">{pillar.detail}</p>
-              </div>
-            ))}
-          </div>
-        </div>
+        <section className="relative min-h-[360px] overflow-hidden border border-border bg-pitch shadow-[var(--shadow-stadium)] pitch-lines lg:min-h-0">
+          <div
+            ref={fieldRef}
+            className="relative h-full min-h-[360px] cursor-crosshair overflow-hidden"
+            onPointerDown={(event) => setPointerTarget(event.clientX, event.clientY)}
+            onPointerMove={(event) => {
+              if (event.buttons) setPointerTarget(event.clientX, event.clientY);
+            }}
+          >
+            <div className="absolute inset-4 border-2 border-pitch-foreground/50" />
+            <div className="absolute left-1/2 top-4 h-[calc(100%-2rem)] w-px bg-pitch-foreground/50" />
+            <div className="absolute left-1/2 top-1/2 h-24 w-24 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-pitch-foreground/50 sm:h-36 sm:w-36" />
+            <div className="absolute left-4 top-[38%] h-[24%] w-7 border-y-2 border-r-2 border-pitch-foreground/50" />
+            <div className="absolute right-4 top-[38%] h-[24%] w-7 border-y-2 border-l-2 border-pitch-foreground/50" />
+            <div className="absolute left-0 top-[40%] h-[20%] w-2 bg-floodlight" />
+            <div className="absolute right-0 top-[40%] h-[20%] w-2 bg-floodlight" />
+            {snapshot.weather === "rain" && <div className="rain-lines pointer-events-none absolute inset-0 opacity-60" />}
 
-        <div className="relative min-h-[520px] overflow-hidden border border-border bg-pitch/70 p-4 shadow-[var(--shadow-stadium)] backdrop-blur pitch-lines">
-          <div className="absolute inset-6 border-2 border-pitch-foreground/35" />
-          <div className="absolute left-1/2 top-6 h-[calc(100%-3rem)] w-px bg-pitch-foreground/35" />
-          <div className="absolute left-1/2 top-1/2 h-40 w-40 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-pitch-foreground/35" />
-          <div className="absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-floodlight" />
+            <PlayerMarker label="YOU" point={snapshot.player} variant="home" />
+            <PlayerMarker label="CPU" point={snapshot.cpu} variant="away" />
+            <PlayerMarker label="GK" point={snapshot.keeperHome} variant="keeper" />
+            <PlayerMarker label="GK" point={snapshot.keeperAway} variant="keeper" />
+            <div
+              className="absolute z-20 grid h-5 w-5 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 border-background bg-floodlight text-[8px] font-black text-accent-foreground shadow-lg transition-transform"
+              style={{ left: `${snapshot.ball.x}%`, top: `${snapshot.ball.y}%` }}
+            >
+              ●
+            </div>
 
-          {pitchSignals.map(([label, position, TacticalIcon]) => {
-            return (
-              <div
-                key={label}
-                className={`absolute ${position} group flex max-w-36 items-center gap-2 border border-border bg-background/80 px-3 py-2 text-sm font-bold text-foreground shadow-lg backdrop-blur transition-transform hover:-translate-y-1`}
-              >
-                <TacticalIcon className="h-4 w-4 text-primary" />
-                <span>{label}</span>
-              </div>
-            );
-          })}
+            <div className="absolute left-3 top-3 flex flex-wrap gap-2">
+              <StatusChip icon={Zap} label={snapshot.message} />
+              <StatusChip icon={Shield} label={`AI ${snapshot.aiLevel.toFixed(1)}x`} />
+            </div>
 
-          <div className="absolute bottom-6 left-6 right-6 border border-border bg-background/85 p-5 backdrop-blur">
-            <p className="text-xs font-bold uppercase text-accent">Recommended priority</p>
-            <p className="mt-2 text-2xl font-bold text-foreground">Start with feel: ball, input, AI, and readable tactics.</p>
-          </div>
-        </div>
-      </section>
-
-      <section id="features" className="relative mx-auto max-w-7xl px-5 py-16 sm:px-8">
-        <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-end">
-          <div>
-            <p className="text-sm font-bold uppercase text-primary">Full feature set</p>
-            <h2 className="mt-2 font-display text-4xl text-foreground sm:text-5xl">Systems by game area</h2>
-          </div>
-          <p className="max-w-xl text-muted-foreground">Everything is grouped by implementation domain so the scope can be trimmed for indie, mobile, or franchise production.</p>
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-3">
-          {featureGroups.map((group) => {
-            const Icon = group.icon;
-            return (
-              <article key={group.title} className="border border-border bg-card/80 p-5 shadow-[var(--shadow-stadium)] backdrop-blur transition-transform hover:-translate-y-1">
-                <div className="mb-5 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="grid h-10 w-10 place-items-center bg-secondary text-primary">
-                      <Icon className="h-5 w-5" />
-                    </span>
-                    <h3 className="text-xl font-bold text-card-foreground">{group.title}</h3>
-                  </div>
-                  <span className="h-2 w-12 bg-primary" />
+            {matchOver && (
+              <div className="absolute inset-0 z-30 grid place-items-center bg-background/70 backdrop-blur-sm">
+                <div className="border border-border bg-card p-6 text-center shadow-[var(--shadow-stadium)]">
+                  <p className="font-display text-4xl text-primary">Full Time</p>
+                  <p className="mt-2 text-xl font-bold text-foreground">{snapshot.score.home} — {snapshot.score.away}</p>
+                  <Button className="mt-5" variant="stadium" onClick={resetMatch}>
+                    <RotateCcw className="h-4 w-4" /> Rematch
+                  </Button>
                 </div>
-                <ul className="space-y-3 text-sm leading-6 text-muted-foreground">
-                  {group.items.map((item) => (
-                    <li key={item} className="flex gap-3">
-                      <span className="mt-2 h-1.5 w-1.5 shrink-0 bg-accent" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </article>
-            );
-          })}
-        </div>
-      </section>
+              </div>
+            )}
+          </div>
+        </section>
 
-      <section id="requirements" className="relative border-y border-border bg-card/40 py-16 backdrop-blur">
-        <div className="mx-auto max-w-7xl px-5 sm:px-8">
-          <div className="mb-8 max-w-3xl">
-            <p className="text-sm font-bold uppercase text-accent">Needed requirements</p>
-            <h2 className="mt-2 font-display text-4xl text-foreground sm:text-5xl">Technical foundation</h2>
+        <aside className="grid gap-3 lg:grid-rows-[auto_auto_1fr]">
+          <div className="border border-border bg-card/80 p-4 shadow-[var(--shadow-stadium)] backdrop-blur">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-bold uppercase text-muted-foreground">Stamina</span>
+              <span className="font-bold text-primary">{Math.round(snapshot.stamina)}%</span>
+            </div>
+            <div className="mt-3 h-3 overflow-hidden bg-secondary">
+              <div className="h-full bg-primary transition-[width]" style={{ width: `${snapshot.stamina}%` }} />
+            </div>
           </div>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {requirements.map((requirement) => {
-              const Icon = requirement.icon;
-              return (
-                <article key={requirement.title} className="border border-border bg-background/60 p-5 transition-colors hover:bg-secondary/70">
-                  <Icon className="mb-5 h-7 w-7 text-primary" />
-                  <h3 className="text-lg font-bold text-foreground">{requirement.title}</h3>
-                  <p className="mt-3 text-sm leading-6 text-muted-foreground">{requirement.body}</p>
-                </article>
-              );
-            })}
-          </div>
-        </div>
-      </section>
 
-      <section className="relative mx-auto max-w-7xl px-5 py-16 sm:px-8">
-        <div className="grid gap-8 lg:grid-cols-[0.78fr_1.22fr] lg:items-start">
-          <div>
-            <p className="text-sm font-bold uppercase text-primary">Priority order</p>
-            <h2 className="mt-2 font-display text-4xl text-foreground sm:text-5xl">Build in waves</h2>
-            <p className="mt-4 text-muted-foreground">This roadmap keeps the project playable early, then adds depth, social retention, and expensive presentation last.</p>
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-1">
+            <Button variant={snapshot.weather === "rain" ? "stadium" : "broadcast"} onClick={toggleWeather}>
+              <CloudRain className="h-4 w-4" /> {snapshot.weather === "rain" ? "Rain" : "Clear"}
+            </Button>
+            <Button variant={snapshot.assisted ? "stadium" : "broadcast"} onClick={toggleAssisted}>
+              <Gamepad2 className="h-4 w-4" /> {snapshot.assisted ? "Assisted" : "Manual"}
+            </Button>
+            <Button variant="broadcast" onClick={() => kickBall("home", 0.72, { x: 82, y: gameRef.current.ball.y })}>
+              <Target className="h-4 w-4" /> Pass
+            </Button>
+            <Button variant="stadium" onClick={() => kickBall("home", 1.18, { x: 99, y: 50 })}>
+              <Zap className="h-4 w-4" /> Shoot
+            </Button>
           </div>
-          <div className="space-y-3">
-            {roadmap.map(([phase, body], index) => (
-              <article key={phase} className="grid gap-4 border border-border bg-card/75 p-5 backdrop-blur sm:grid-cols-[9rem_1fr]">
-                <div className="flex items-center gap-3">
-                  <span className="grid h-9 w-9 place-items-center bg-primary font-bold text-primary-foreground">{index + 1}</span>
-                  <h3 className="font-bold text-foreground">{phase}</h3>
-                </div>
-                <p className="text-sm leading-6 text-muted-foreground">{body}</p>
-              </article>
-            ))}
+
+          <div className="border border-border bg-card/80 p-4 text-sm font-semibold text-muted-foreground shadow-[var(--shadow-stadium)] backdrop-blur">
+            <div className="grid grid-cols-2 gap-3">
+              <ControlKey value="WASD" label="Move" />
+              <ControlKey value="Shift" label="Sprint" />
+              <ControlKey value="J" label="Pass" />
+              <ControlKey value="K" label="Shoot" />
+            </div>
           </div>
-        </div>
-      </section>
+        </aside>
+      </div>
     </main>
+  );
+}
+
+function PlayerMarker({ point, label, variant }: { point: Vec; label: string; variant: "home" | "away" | "keeper" }) {
+  const className =
+    variant === "home"
+      ? "bg-primary text-primary-foreground"
+      : variant === "away"
+        ? "bg-accent text-accent-foreground"
+        : "bg-secondary text-secondary-foreground";
+
+  return (
+    <div
+      className={`absolute z-10 grid h-8 w-8 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 border-pitch-foreground text-[10px] font-black shadow-lg transition-transform sm:h-10 sm:w-10 ${className}`}
+      style={{ left: `${point.x}%`, top: `${point.y}%` }}
+    >
+      {label}
+    </div>
+  );
+}
+
+function StatusChip({ icon: Icon, label }: { icon: typeof Zap; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-2 border border-border bg-background/80 px-2 py-1 text-xs font-bold text-foreground backdrop-blur">
+      <Icon className="h-3.5 w-3.5 text-primary" />
+      {label}
+    </span>
+  );
+}
+
+function ControlKey({ value, label }: { value: string; label: string }) {
+  return (
+    <div className="border border-border bg-background/60 p-3">
+      <p className="font-display text-lg text-foreground">{value}</p>
+      <p className="text-xs uppercase text-muted-foreground">{label}</p>
+    </div>
   );
 }
