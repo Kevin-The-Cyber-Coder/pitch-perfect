@@ -18,7 +18,7 @@ import {
   Trophy,
   Users,
   Waves,
-  Whistle,
+  BadgeAlert,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -184,7 +184,7 @@ function Index() {
             ["Weather", "top-[24%] right-[16%]", CloudRain],
             ["Career", "top-[47%] left-[10%]", Trophy],
             ["Co-op", "top-[44%] right-[12%]", Users],
-            ["Ref logic", "bottom-[22%] left-[27%]", Whistle],
+            ["Ref logic", "bottom-[22%] left-[27%]", BadgeAlert],
             ["Analytics", "bottom-[15%] right-[22%]", LineChart],
           ].map(([label, position, Icon]) => {
             const TacticalIcon = Icon as typeof Brain;
