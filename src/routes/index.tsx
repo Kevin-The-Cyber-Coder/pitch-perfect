@@ -20,6 +20,7 @@ import {
   Waves,
   BadgeAlert,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
@@ -127,6 +128,15 @@ const roadmap = [
   ["Stretch", "Full VAR review, licensed stadiums, cross-platform progression, voice substitutions, advanced social loops."],
 ];
 
+const pitchSignals: Array<[string, string, LucideIcon]> = [
+  ["Adaptive AI", "top-[15%] left-[16%]", Brain],
+  ["Weather", "top-[24%] right-[16%]", CloudRain],
+  ["Career", "top-[47%] left-[10%]", Trophy],
+  ["Co-op", "top-[44%] right-[12%]", Users],
+  ["Ref logic", "bottom-[22%] left-[27%]", BadgeAlert],
+  ["Analytics", "bottom-[15%] right-[22%]", LineChart],
+];
+
 function Index() {
   return (
     <main className="relative min-h-screen overflow-hidden bg-background text-foreground">
@@ -179,18 +189,10 @@ function Index() {
           <div className="absolute left-1/2 top-1/2 h-40 w-40 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-pitch-foreground/35" />
           <div className="absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-floodlight" />
 
-          {[
-            ["Adaptive AI", "top-[15%] left-[16%]", Brain],
-            ["Weather", "top-[24%] right-[16%]", CloudRain],
-            ["Career", "top-[47%] left-[10%]", Trophy],
-            ["Co-op", "top-[44%] right-[12%]", Users],
-            ["Ref logic", "bottom-[22%] left-[27%]", BadgeAlert],
-            ["Analytics", "bottom-[15%] right-[22%]", LineChart],
-          ].map(([label, position, Icon]) => {
-            const TacticalIcon = Icon as typeof Brain;
+          {pitchSignals.map(([label, position, TacticalIcon]) => {
             return (
               <div
-                key={label as string}
+                key={label}
                 className={`absolute ${position} group flex max-w-36 items-center gap-2 border border-border bg-background/80 px-3 py-2 text-sm font-bold text-foreground shadow-lg backdrop-blur transition-transform hover:-translate-y-1`}
               >
                 <TacticalIcon className="h-4 w-4 text-primary" />
