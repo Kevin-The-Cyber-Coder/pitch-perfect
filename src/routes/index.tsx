@@ -392,25 +392,50 @@ function cpuDecision(game: GameState, carrier: Player) {
 function passBall(game: GameState, team: Team) {
   const carrier = controlledCarrier(game, team);
   if (!carrier) return;
-  const mates = game.players.filter((player) => player.team === team && player.id !== carrier.id && player.role !== "keeper");
   const forward = team === "home" ? 1 : -1;
-  const receiver = mates
-    .filter((player) => team === "home" ? player.pos.x > carrier.pos.x - 6 : player.pos.x < carrier.pos.x + 6)
-    .sort((a, b) => dist(a.pos, carrier.pos) - dist(b.pos, carrier.pos))[0] ?? mates[0];
-  releaseBall(game, carrier, receiver ? receiver.pos : { x: carrier.pos.x + forward * 18, z: carrier.pos.z }, 1.2, 0.18);
-  game.message = team === "home" ? "Pass played" : "CPU pass";
+  const target = team === "home" ? manualTarget(game, carrier, 22, forward, true) : assistedPassTarget(game, carrier, team);
+  releaseBall(game, carrier, target, team === "home" ? 1.35 : 1.2, 0.18);
+  game.message = team === "home" ? "Manual pass" : "CPU pass";
 }
 
 function shootBall(game: GameState, team: Team) {
   const carrier = controlledCarrier(game, team);
   if (!carrier) return;
-  const target = team === "home" ? { x: FIELD_X + 4, z: game.assisted ? 0 : carrier.pos.z * 0.45 } : { x: -FIELD_X - 4, z: 0 };
+  const target = team === "home" ? manualTarget(game, carrier, 42, 1, false) : { x: -FIELD_X - 4, z: 0 };
   if (team === "home") {
     if (Math.abs(carrier.pos.z) < 7) game.learning.centerShots += 0.022;
     if (carrier.pos.z > 7) game.learning.rightLane += 0.016;
   }
   releaseBall(game, carrier, target, team === "home" ? 2.05 : 1.8, 0.52);
-  game.message = team === "home" ? "Shot on goal" : "CPU shot";
+  game.message = team === "home" ? "Manual shot" : "CPU shot";
+}
+
+function manualTarget(game: GameState, carrier: Player, range: number, forward: number, allowAssistReceiver: boolean) {
+  const aim = getAimVector(game.keys, forward);
+  if (allowAssistReceiver && game.assisted && !hasAimInput(game.keys)) return assistedPassTarget(game, carrier, carrier.team);
+  return {
+    x: clamp(carrier.pos.x + aim.x * range, -FIELD_X - 4, FIELD_X + 4),
+    z: clamp(carrier.pos.z + aim.z * range, -FIELD_Z + 1, FIELD_Z - 1),
+  };
+}
+
+function assistedPassTarget(game: GameState, carrier: Player, team: Team) {
+  const mates = game.players.filter((player) => player.team === team && player.id !== carrier.id && player.role !== "keeper");
+  const receiver = mates
+    .filter((player) => team === "home" ? player.pos.x > carrier.pos.x - 6 : player.pos.x < carrier.pos.x + 6)
+    .sort((a, b) => dist(a.pos, carrier.pos) - dist(b.pos, carrier.pos))[0] ?? mates[0];
+  return receiver ? receiver.pos : { x: carrier.pos.x + (team === "home" ? 1 : -1) * 18, z: carrier.pos.z };
+}
+
+function hasAimInput(keys: Set<string>) {
+  return ["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright"].some((key) => keys.has(key));
+}
+
+function getAimVector(keys: Set<string>, forward: number) {
+  const x = (keys.has("d") || keys.has("arrowright") ? 1 : 0) - (keys.has("a") || keys.has("arrowleft") ? 1 : 0);
+  const z = (keys.has("s") || keys.has("arrowdown") ? 1 : 0) - (keys.has("w") || keys.has("arrowup") ? 1 : 0);
+  const length = Math.hypot(x, z) || 1;
+  return x || z ? { x: x / length, z: z / length } : { x: forward, z: 0 };
 }
 
 function tackle(game: GameState) {
